@@ -1,0 +1,66 @@
+pip install dwave-ocean-sdk numpy gym
+import numpy as np
+
+def evolution_step(mean, sigma, fitness_fn, pop_size=50):
+    perturbations = np.random.randn(pop_size, len(mean))
+    candidates = mean + sigma * perturbations
+    rewards = np.array([fitness_fn(theta) for theta in candidates])
+    grad = np.dot(perturbations.T, rewards) / (pop_size * sigma)
+    return mean + 0.1 * grad, candidates, rewards
+class QDArchive:
+    def __init__(self, grid_shape=(10,10)):
+        self.archive = np.empty(grid_shape, dtype=object)
+
+    def update(self, theta, fitness, behavior_descriptor):
+        x, y = self._discretize(behavior_descriptor)
+        if self.archive[x, y] is None or fitness > self.archive[x, y]['fitness']:
+            self.archive[x, y] = {'theta': theta, 'fitness': fitness, 'behavior': behavior_descriptor}
+
+    def _discretize(self, b):
+        return int(b[0]*10), int(b[1]*10)
+from dwave.system import DWaveSampler, EmbeddingComposite
+from dimod import BinaryQuadraticModel
+import numpy as np
+
+def build_qubo(candidates, rewards, behaviors, diversity_matrix, alpha=1.0):
+    n = len(candidates)
+    Q = {}
+    for i in range(n):
+        Q[(i, i)] = -rewards[i]
+        for j in range(i+1, n):
+            Q[(i, j)] = alpha * diversity_matrix[i][j]
+    return Q
+
+def solve_qubo(Q, use_simulated=True):
+    bqm = BinaryQuadraticModel.from_qubo(Q)
+    if use_simulated:
+        from neal import SimulatedAnnealingSampler
+        sampler = SimulatedAnnealingSampler()
+    else:
+        sampler = EmbeddingComposite(DWaveSampler())
+    sampleset = sampler.sample(bqm, num_reads=10)
+    return sampleset.first.sample
+from evolution_strategy import evolution_step
+from qd_archive import QDArchive
+from quantum_selector import build_qubo, solve_qubo
+
+mean = np.zeros(10)
+sigma = 0.1
+archive = QDArchive()
+fitness_fn = lambda x: -np.linalg.norm(x - 2)  # sample objective
+behavior_fn = lambda x: [np.tanh(x[0]), np.tanh(x[1])]  # sample behavior
+
+for gen in range(100):
+    mean, candidates, rewards = evolution_step(mean, sigma, fitness_fn)
+    behaviors = [behavior_fn(c) for c in candidates]
+
+    # Build diversity matrix
+    div_matrix = np.array([[np.linalg.norm(np.array(b1) - np.array(b2)) for b2 in behaviors] for b1 in behaviors])
+    
+    # Build and solve QUBO
+    Q = build_qubo(candidates, rewards, behaviors, div_matrix)
+    selected = solve_qubo(Q)
+
+    for i, select in selected.items():
+        if select:
+            archive.update(candidates[i], rewards[i], behaviors[i])
