@@ -64,3 +64,73 @@ for gen in range(100):
     for i, select in selected.items():
         if select:
             archive.update(candidates[i], rewards[i], behaviors[i])
+pip install gym numpy matplotlib dimod neal dwave-ocean-sdk
+import gym
+import numpy as np
+import dimod
+import neal
+from dwave.system import DWaveSampler, EmbeddingComposite
+import matplotlib.pyplot as plt
+
+# Environment
+env = gym.make('MountainCarContinuous-v0')
+obs_space = env.observation_space.shape[0]
+action_space = 1
+
+# Sample population of policies
+def sample_population(pop_size, param_dim):
+    return np.random.randn(pop_size, param_dim)
+
+# Evaluate policy
+def evaluate_policy(policy, episodes=1):
+    total_reward = 0
+    for _ in range(episodes):
+        obs = env.reset()[0]  # for gym>=0.26
+        done = False
+        while not done:
+            action = np.tanh(np.dot(policy, obs))
+            obs, reward, terminated, truncated, _ = env.step([action])
+            done = terminated or truncated
+            total_reward += reward
+    return total_reward
+
+# Build QUBO for quality + diversity
+def build_qubo(policies, rewards):
+    num = len(policies)
+    Q = {}
+    for i in range(num):
+        Q[(i, i)] = -rewards[i]
+        for j in range(i + 1, num):
+            diversity = np.linalg.norm(policies[i] - policies[j])
+            Q[(i, j)] = diversity  # Encourage diversity
+    return Q
+
+# Solve QUBO
+def solve_qubo(Q, use_dwave=False):
+    if use_dwave:
+        sampler = EmbeddingComposite(DWaveSampler())
+        response = sampler.sample_qubo(Q, num_reads=100)
+    else:
+        sampler = neal.SimulatedAnnealingSampler()
+        response = sampler.sample_qubo(Q, num_reads=100)
+    best = next(iter(response))
+    return [i for i in range(len(best)) if best[i] == 1]
+
+# Training loop
+def train(pop_size=20, param_dim=obs_space, iterations=5, use_dwave=False):
+    population = sample_population(pop_size, param_dim)
+    for it in range(iterations):
+        rewards = [evaluate_policy(p) for p in population]
+        Q = build_qubo(population, rewards)
+        selected = solve_qubo(Q, use_dwave)
+        elites = [population[i] for i in selected]
+        mean = np.mean(elites, axis=0)
+        std = np.std(elites, axis=0)
+        population = mean + 0.5 * np.random.randn(pop_size, param_dim) * std
+        print(f"[Iteration {it+1}] Best Reward: {np.max(rewards):.2f}")
+    return population
+
+# Run simulation
+trained_population = train(pop_size=20, iterations=5, use_dwave=False)
+dwave setup
+
