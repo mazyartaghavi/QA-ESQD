@@ -1,0 +1,17 @@
+environment: MPE
+agents: 5
+episodes: 5000
+
+es:
+  population_size: 256
+  sigma: 0.02
+
+qd:
+  archive_bins: [10, 10]
+  diversity_metric: behavioral
+
+quantum:
+  enabled: true
+  backend: annealer
+  qubo_bits: 4
+  refinement_interval: 20
