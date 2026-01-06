@@ -1,0 +1,13 @@
+import unittest
+import numpy as np
+from quantum.qubo_mapper import PolicyQUBOMapper
+
+class TestQUBO(unittest.TestCase):
+    def test_qubo_generation(self):
+        mapper = PolicyQUBOMapper()
+        w = np.random.randn(5)
+        Q = mapper.build_qubo(w)
+        self.assertTrue(len(Q) > 0)
+
+if __name__ == "__main__":
+    unittest.main()
