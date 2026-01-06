@@ -1,0 +1,10 @@
+cff-version: 1.2.0
+title: Q-EvoQD
+message: "If you use this software, please cite it."
+authors:
+  - family-names: Taghavi
+    given-names: Mazyar
+version: 1.0.0
+date-released: 2026-01-01
+license: MIT
+repository-code: https://github.com/yourusername/Q-EvoQD
